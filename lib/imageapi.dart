@@ -1,4 +1,3 @@
-import 'package:cameara_on/apiconection.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -21,43 +20,83 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   TextEditingController _nameController = TextEditingController();
   TextEditingController _emailController = TextEditingController();
   TextEditingController _passwordController = TextEditingController();
-  String? _imagePath;
+
+
+  //PickedFile? _imageFile;
+
+  Future<void> _pickImage(ImageSource source) async {
+    final picker = ImagePicker();
+    final pickedImage = await picker.getImage(source: source);
+    setState(() {
+      _imageFile = pickedImage;
+    });
+  }
 
   Future<void> _registerUser() async {
+     try {
+      if (_imageFile != null) {
+        // Upload the image first
+        var imageUploadRequest = http.MultipartRequest(
+          'POST',
+          Uri.parse('https://gl3.intern-developers.innovay.com/api/user'), // Replace with your API endpoint
+        );
+        imageUploadRequest.files.add(await http.MultipartFile.fromPath(
+          'image',
+          _imageFile!.path,
+        ));
+
+        // Send the image upload request to the server
+        var imageResponse = await imageUploadRequest.send();
+        // Handle image upload response if needed
+        if (imageResponse.statusCode == 200) {
+          // Image upload successful
+          print('Image uploaded successfully');
+        } else {
+          // Image upload failed
+          print('Failed to upload image');
+          print('Status code: ${imageResponse.statusCode}');
+          print('Response body: ${await imageResponse.stream.bytesToString()}');
+          _showSnackbar('Failed to upload image');
+          return;
+        }
+      }
+
+      // Handle user registration response
+      var registrationResponse = await _registerUserRequest();
+      if (registrationResponse.statusCode == 200) {
+        // Registration successful
+        print('User registered successfully');
+        _showSnackbar('User registered successfully');
+        // Alternatively, show a dialog to inform the user about successful registration
+      } else {
+        // Registration failed
+        print('Failed to register user');
+        print('Status code: ${registrationResponse.statusCode}');
+        print('Response body: ${registrationResponse.body}');
+        _showSnackbar('Failed to register user');
+        // Alternatively, show a dialog to inform the user about registration failure
+      }
+    }catch (e) {
+      // Exception occurred during the API calls
+      print('Error: $e');
+      _showSnackbar('An error occurred');
+    }
+  }
+
+  Future<http.Response> _registerUserRequest() async {
     var registrationData = {
       'name': _nameController.text,
       'email': _emailController.text,
       'password': _passwordController.text,
-      'image': _imagePath, // Use the image path from the image picker
+
+
     };
 
-    try {
-      var registrationResponse = await _registerUserRequest(registrationData);
-      // Check the status code of the response
-      print("------------------------------------------------------------");
-      print(registrationResponse.statusCode);
-      if (registrationResponse.statusCode == 200) {
-        var responseData = jsonDecode(registrationResponse.body);
-        int id = responseData['data']['id'] ;
-
-        print(registrationResponse.body);
-        _showSnackbar('Registration successful');
-        Navigator.of(context).push(MaterialPageRoute(builder: (context) =>SomePage(id: id)));
-        // You can navigate to another screen or perform any other action here
-      } else {
-        _showSnackbar('Registration failed');
-      }
-    } catch (e) {
-      _showSnackbar('Error occurred during registration');
-    }
-  }
-
-  Future<http.Response> _registerUserRequest(Map<String, dynamic> data) async {
     // Send user registration data to the server
     var registrationResponse = await http.post(
       Uri.parse('https://gl3.intern-developers.innovay.com/api/user'), // Replace with your API endpoint
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(data),
+      body: jsonEncode(registrationData),
     );
 
     return registrationResponse;
@@ -65,20 +104,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   void _showSnackbar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  Future<void> _pickImage(ImageSource source) async {
-    final imagePicker = ImagePicker();
-    try {
-      final pickedImage = await imagePicker.pickImage(source: source);
-      setState(() {
-        if (pickedImage != null) {
-          _imagePath = pickedImage.path;
-        }
-      });
-    } catch (e) {
-      _showSnackbar('Error picking image');
-    }
   }
 
   @override
@@ -93,12 +118,13 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             TextField(controller: _nameController, decoration: InputDecoration(labelText: 'Name')),
             TextField(controller: _emailController, decoration: InputDecoration(labelText: 'Email')),
             TextField(controller: _passwordController, decoration: InputDecoration(labelText: 'Password')),
+
             SizedBox(height: 16),
-            _imagePath == null
-                ? Text('No image selected.')
-                : Image.file(File(_imagePath!), height: 100, width: 100),
+             _imageFile == null
+               ? Text('No image selected.')
+              : Image.file(File(_imageFile!.path), height: 100, width: 100),
             SizedBox(height: 16),
-            Row(
+             Row(
               children: [
                 ElevatedButton(
                   onPressed: () => _pickImage(ImageSource.camera),
@@ -115,7 +141,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             ElevatedButton(
               onPressed: _registerUser,
               child: Text('Register'),
-
             ),
           ],
         ),
